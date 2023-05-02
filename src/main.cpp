@@ -21,6 +21,7 @@ Bewegungssensor auf A0
 
 #include <Arduino.h>
 #include <GxEPD2_BW.h>
+#include <U8g2_for_Adafruit_GFX.h>
 #include <Fonts/FreeMonoBold9pt7b.h>
 
 #include <ESP8266WiFi.h>
@@ -34,7 +35,9 @@ Bewegungssensor auf A0
 #include "main.h"
 
 GxEPD2_BW<GxEPD2_420, GxEPD2_420::HEIGHT> display(GxEPD2_420(/*CS=D8*/ D8, /*DC=D3*/ D3, /*RST=D4*/ D4, /*BUSY=D2*/ D2));
+U8G2_FOR_ADAFRUIT_GFX u8g2Fonts;
 
+int8_t RedrawCounter=0;
 
 short temp=0;
 short bat=0;
@@ -44,8 +47,6 @@ float Buddy=0, Mika=0, Matti=0, Timmi=0;
 
 
 const char* wifihostname = "ESP_Epaper_Neu";
-
-short RedrawCounter = 0;
 
 #define UDPDEBUG 1
 #ifdef UDPDEBUG
@@ -119,8 +120,9 @@ void setup() {
   Serial.println("setup");
 
   display.init(115200); // default 10ms reset pulse, e.g. for bare panels with DESPI-C02
+ u8g2Fonts.begin(display); 
 
-  display.setRotation(0);
+  //display.setRotation(0);
   helloWorld("Starte Network");
     WifiConnect();
 
@@ -228,6 +230,40 @@ void loop() {
 void helloWorld(const char *HelloWorld)
 {
   //Serial.println("helloWorld");
+  display.setRotation(3);
+  uint16_t bg = GxEPD_WHITE;
+  uint16_t fg = GxEPD_BLACK;
+  u8g2Fonts.setFontMode(1);                 // use u8g2 transparent mode (this is default)
+  u8g2Fonts.setFontDirection(0);            // left to right (this is default)
+  u8g2Fonts.setForegroundColor(fg);         // apply Adafruit GFX color
+  u8g2Fonts.setBackgroundColor(bg);         // apply Adafruit GFX color
+  u8g2Fonts.setFont(u8g2_font_helvR14_tf);  // select u8g2 font from here: https://github.com/olikraus/u8g2/wiki/fntlistall
+  int16_t tw = u8g2Fonts.getUTF8Width(HelloWorld); // text box width
+  int16_t ta = u8g2Fonts.getFontAscent(); // positive
+  int16_t td = u8g2Fonts.getFontDescent(); // negative; in mathematicians view
+  int16_t th = ta - td; // text box height
+  //Serial.print("ascent, descent ("); Serial.print(u8g2Fonts.getFontAscent()); Serial.print(", "); Serial.print(u8g2Fonts.getFontDescent()); Serial.println(")");
+  // center bounding box by transposition of origin:
+  // y is base line for u8g2Fonts, like for Adafruit_GFX True Type fonts
+  uint16_t x = (display.width() - tw) / 2;
+  uint16_t y = (display.height() - th) / 2 + ta;
+  //Serial.print("bounding box    ("); Serial.print(x); Serial.print(", "); Serial.print(y); Serial.print(", "); Serial.print(tw); Serial.print(", "); Serial.print(th); Serial.println(")");
+  display.firstPage();
+  do
+  {
+    display.fillScreen(bg);
+    u8g2Fonts.setCursor(x, y); // start writing at this position
+    u8g2Fonts.print(HelloWorld);
+  }
+  while (display.nextPage());
+  //Serial.println("helloWorld done");
+}
+
+
+
+void helloWorld2(const char *HelloWorld)
+{
+  //Serial.println("helloWorld");
   display.setRotation(0);
   display.setFont(&FreeMonoBold9pt7b);
   display.setTextColor(GxEPD_BLACK);
@@ -250,30 +286,55 @@ void helloWorld(const char *HelloWorld)
 void UpdateDisplay()
 {
   display.setRotation(3);
-  display.setFont(&FreeMonoBold9pt7b);
-  display.setTextColor(GxEPD_BLACK);
-  display.setFullWindow();
+  uint16_t bg = GxEPD_WHITE;
+  uint16_t fg = GxEPD_BLACK;
+  u8g2Fonts.setFontMode(1);                 // use u8g2 transparent mode (this is default)
+  u8g2Fonts.setFontDirection(0);            // left to right (this is default)
+  u8g2Fonts.setForegroundColor(fg);         // apply Adafruit GFX color
+  u8g2Fonts.setBackgroundColor(bg);         // apply Adafruit GFX color
+
+  if (RedrawCounter++ > 10) {  // war 15;
+      display.setFullWindow();
+      RedrawCounter = 0;
+  }
+  else
+    display.setPartialWindow(0, 0, display.width(), display.height());
+
   display.firstPage();
-  display.fillScreen(GxEPD_WHITE);
+  do
+  {
+    display.fillScreen(bg);
+    u8g2Fonts.setFont(u8g2_font_inb38_mf);
+    u8g2Fonts.setCursor(180, 60);
+    u8g2Fonts.print(String(temp)+"°");
+    u8g2Fonts.setFont(u8g2_font_helvB24_tf);
+    u8g2Fonts.setCursor(200, 295);
+    u8g2Fonts.print(String(bat)+"%");
 
-  display.setCursor(200, 30);
-  display.print(String(temp)+"°");
-  display.setCursor(200, 220);
-  display.print(String(bat)+"%");
-  display.setCursor(200, 270);
-  display.print(String(prod)+" Kwh");
-  display.setCursor(200, 300);
-  display.print(String(wasser)+" Liter");
+    u8g2Fonts.setFont(u8g2_font_helvR14_tf);  // select u8g2 font from here: https://github.com/olikraus/u8g2/wiki/fntlistall
+    u8g2Fonts.setCursor(200, 350);
+    u8g2Fonts.print(String(prod)+" Wh");
+    u8g2Fonts.setCursor(200, 370);
+    u8g2Fonts.print(String(wasser)+" Liter");
 
-  display.setCursor(30, 280);
-  display.print("Buddy: "+String(Buddy)+" kg");  
-  display.setCursor(30, 310);
-  display.print("Mika: "+String(Mika)+" kg");  
-  display.setCursor(30, 340);
-  display.print("Matti: "+String(Matti)+" kg");  
-  display.setCursor(30, 370);
-  display.print("Timmi: "+String(Timmi)+" kg");  
+    u8g2Fonts.setCursor(20, 295);
+    u8g2Fonts.print("Buddy: ");
+    u8g2Fonts.setCursor(80, 295);
+    u8g2Fonts.print(String(Buddy)+" kg");  
+    u8g2Fonts.setCursor(20, 320);
+    u8g2Fonts.print("Mika: ");
+    u8g2Fonts.setCursor(80, 320);
+    u8g2Fonts.print(String(Mika)+" kg");  
+    u8g2Fonts.setCursor(20, 345);
+    u8g2Fonts.print("Matti: ");
+    u8g2Fonts.setCursor(80, 345);    
+    u8g2Fonts.print(String(Matti)+" kg");  
+    u8g2Fonts.setCursor(20, 370);
+    u8g2Fonts.print("Timmi: ");    
+    u8g2Fonts.setCursor(80, 370);
+    u8g2Fonts.print(String(Timmi)+" kg");  
 
+  }
   while (display.nextPage());
   display.powerOff();
 }
