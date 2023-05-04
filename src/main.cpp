@@ -30,7 +30,7 @@ Bewegungssensor auf A0
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
 #include <PubSubClient.h>
-//#include <ArduinoJson.h>
+#include <ArduinoJson.h>
 
 #include "main.h"
 
@@ -44,6 +44,17 @@ short bat=0;
 short prod=0;
 short wasser=0;
 float Buddy=0, Mika=0, Matti=0, Timmi=0;
+
+float Wetter_wind=0;
+String Wetter_main="";
+String Wetter_description="";
+String Wetter_icon="";
+float Wetter_rain=0;
+String Wetter_rainForecast="";
+String Wetter_hour1="";
+String Wetter_hour2="";
+String Wetter_hour3="";
+String Wetter_hour4="";
 
 
 const char* wifihostname = "ESP_Epaper_Neu";
@@ -162,24 +173,25 @@ void setup() {
     ArduinoOTA.begin();
     setTimeZone(MY_TZ);
 
-
-    Serial.printf("vor MQTT");
-    mqttclient.setServer(mqtt_server, 1883);
-    mqttclient.setCallback(MQTT_callback);
-    mqttclient.setBufferSize(1024);
+    Serial.println("vor MQTT");
+    mqttclient.setServer(mqtt_server, 1883);  
+    mqttclient.setCallback(MQTT_callback); 
+    mqttclient.setBufferSize(8192); 
    if (mqttclient.connect(wifihostname, MQTT_User, MQTT_Pass)) {
-      UDBDebug("MQTT connect successful"); 
-      const char *TOPIC = "hm/status/Temp_Aussen2/TEMPERATURE";
-      mqttclient.subscribe(TOPIC);
-      const char *TOPIC2 = "HomeServer/Batterie/USOC";
-      mqttclient.subscribe(TOPIC2);
-      const char *TOPIC3 = "HomeServer/Tiere/#";
+      UDBDebug(F("MQTT connect successful"));  
+      const char *TOPIC = ("hm/status/Temp_Aussen2/TEMPERATURE");
+      mqttclient.subscribe(TOPIC);  
+      const char *TOPIC2 = ("HomeServer/Batterie/USOC");
+      mqttclient.subscribe(TOPIC2);   
+      const char *TOPIC3 = ("HomeServer/Tiere/#");
       mqttclient.subscribe(TOPIC3);
-      const char *TOPIC4 = "HomeServer/Heizung/WasserDay";
+      const char *TOPIC4 = ("HomeServer/Heizung/WasserDay");
       mqttclient.subscribe(TOPIC4);      
-      const char *TOPIC5 = "HomeServer/Strom/Produktion";
-      mqttclient.subscribe(TOPIC5);  
-     }  
+      const char *TOPIC5 = ("HomeServer/Strom/Produktion");
+      mqttclient.subscribe(TOPIC5);   
+      const char *TOPIC6 = ("HomeServer/Wetter/#");
+      mqttclient.subscribe(TOPIC6);  
+      }  
     else
        UDBDebug("MQTT connect error");  
 
@@ -283,6 +295,38 @@ void helloWorld2(const char *HelloWorld)
   display.powerOff();
 }
 
+
+void UpdateWetterHour(String data, short x, short y) {
+
+    StaticJsonDocument<256> doc;
+    //DeserializationError error = deserializeJson(doc, data);
+/*
+    if (error) {
+      Serial.print(F("deserializeJson() failed: "));
+      Serial.println(error.f_str());
+      return;
+    }
+    else
+    Serial.println("hour");
+    */
+       /* 
+    int temp = doc["temp"]; // 8
+    //float wind = doc["wind"]; // 17.1
+    //const char* main = doc["main"]; // "Clouds"
+    //const char* description = doc["description"]; // "Mäßig bewölkt"
+    const char* icon = doc["icon"]; // "03d"
+    //const char* day = doc["day"]; // "Thu"
+    const char* hour = doc["hour"]; // "08:00"
+
+    u8g2Fonts.setFont(u8g2_font_helvR14_tf);
+    u8g2Fonts.setCursor(x, y);
+    u8g2Fonts.print(hour); 
+    u8g2Fonts.setFont(u8g2_font_logisoso22_tf);
+    u8g2Fonts.setCursor(x, y+16);
+    u8g2Fonts.print(temp); 
+    */
+}
+
 void UpdateDisplay()
 {
   display.setRotation(3);
@@ -304,7 +348,7 @@ void UpdateDisplay()
   do
   {
     display.fillScreen(bg);
-    u8g2Fonts.setFont(u8g2_font_inb38_mf);
+    u8g2Fonts.setFont(u8g2_font_fub42_tf); //u8g2_font_inb38_mf);
     u8g2Fonts.setCursor(180, 60);
     u8g2Fonts.print(String(temp)+"°");
     u8g2Fonts.setFont(u8g2_font_helvB24_tf);
@@ -319,21 +363,31 @@ void UpdateDisplay()
 
     u8g2Fonts.setCursor(20, 295);
     u8g2Fonts.print("Buddy: ");
-    u8g2Fonts.setCursor(80, 295);
-    u8g2Fonts.print(String(Buddy)+" kg");  
+    u8g2Fonts.setCursor(90, 295);
+    u8g2Fonts.print(String(Buddy,1)+" kg");  
     u8g2Fonts.setCursor(20, 320);
     u8g2Fonts.print("Mika: ");
-    u8g2Fonts.setCursor(80, 320);
-    u8g2Fonts.print(String(Mika)+" kg");  
+    u8g2Fonts.setCursor(90, 320);
+    u8g2Fonts.print(String(Mika,1)+" kg");  
     u8g2Fonts.setCursor(20, 345);
     u8g2Fonts.print("Matti: ");
-    u8g2Fonts.setCursor(80, 345);    
-    u8g2Fonts.print(String(Matti)+" kg");  
+    u8g2Fonts.setCursor(90, 345);    
+    u8g2Fonts.print(String(Matti,1)+" kg");  
     u8g2Fonts.setCursor(20, 370);
     u8g2Fonts.print("Timmi: ");    
-    u8g2Fonts.setCursor(80, 370);
-    u8g2Fonts.print(String(Timmi)+" kg");  
+    u8g2Fonts.setCursor(90, 370);
+    u8g2Fonts.print(String(Timmi,1)+" kg");  
 
+    u8g2Fonts.setFont(u8g2_font_luBS12_tf); // u8g2_font_helvR12_tf);  // select u8g2 font from here: https://github.com/olikraus/u8g2/wiki/fntlistall
+    u8g2Fonts.setCursor(20, 75);
+    u8g2Fonts.print(Wetter_description);  
+
+    UpdateWetterHour(Wetter_hour1, 50, 120);
+    /*
+    UpdateWetterHour(Wetter_hour2, 50, 200);
+    UpdateWetterHour(Wetter_hour3, 50, 280);    
+    UpdateWetterHour(Wetter_hour4, 170, 120);
+*/
   }
   while (display.nextPage());
   display.powerOff();
@@ -356,6 +410,10 @@ void UDBDebug(const char * message) {
 #endif  
 }
 
+float round1(float value) {
+   return (int)(value * 10 + 0.5) / 10.0;
+}
+
   // Callback function
 void MQTT_callback(char* topic, byte* payload, unsigned int length) {
 
@@ -365,34 +423,89 @@ void MQTT_callback(char* topic, byte* payload, unsigned int length) {
     String value = String((char *) payload);
     Serial.println("### "+message +" - "+value);
 
-    if (message == "hm/status/Temp_Aussen2/TEMPERATURE") {
+    if (message == F("hm/status/Temp_Aussen2/TEMPERATURE")) {
       temp = value.toInt();
+      return;
     }
 
-    if (message == "HomeServer/Batterie/USOC") {
+    if (message == F("HomeServer/Batterie/USOC")) {
       bat = value.toInt();
       UpdateDisplay();
+      return;
     }
     
-    if (message == "HomeServer/Strom/Produktion") {
+    if (message == F("HomeServer/Strom/Produktion")) {
       prod = value.toInt();
+      return;
     }
 
-    if (message == "HomeServer/Heizung/WasserDay") {
+    if (message == F("HomeServer/Heizung/WasserDay")) {
       wasser = value.toInt();
+      return;
     }
 
-    if (message == "HomeServer/Tiere/Tag_Buddy") {
-      Buddy = value.toFloat();
+    if (message == F("HomeServer/Tiere/Tag_Buddy")) {
+      Buddy = round1(value.toFloat());
+      return;
     }        
-    if (message == "HomeServer/Tiere/Tag_Mika") {
-      Mika = value.toFloat();
+    if (message == F("HomeServer/Tiere/Tag_Mika")) {
+      Mika = round1(value.toFloat());
+      return;
     }  
-    if (message == "HomeServer/Tiere/Tag_Matti") {
-      Matti = value.toFloat();
+    if (message == F("HomeServer/Tiere/Tag_Matti")) {
+      Matti = round1(value.toFloat());
+      return;
     }  
-    if (message == "HomeServer/Tiere/Timmi") {
-      Timmi = value.toFloat();
+    if (message == F("HomeServer/Tiere/Timmi")) {
+      Timmi = round1(value.toFloat());
+      return;
     }  
 
+    if (message.length() > 17) {
+        UDBDebug(message.substring(0, 17));
+        if (message.substring(0, 17) == F("HomeServer/Wetter")) {
+          if (message == F("HomeServer/Wetter/wind")) {
+            Wetter_wind = value.toFloat();
+            return;
+          }
+          if (message == F("HomeServer/Wetter/main")) {
+            Wetter_main = value;
+            return;
+          }
+          if (message == F("HomeServer/Wetter/description")) {
+            Wetter_description = value;
+            return;
+          }            
+          if (message == F("HomeServer/Wetter/icon")) {
+            Wetter_icon = value;
+            return;
+          }   
+          if (message == F("HomeServer/Wetter/rain")) {
+            Wetter_rain = value.toFloat();
+            return;
+          }       
+          if (message == F("HomeServer/Wetter/rainForecast")) {
+            Wetter_rainForecast = value;
+            return;
+          }  
+          if (message == F("HomeServer/Wetter/hour1")) {
+            Wetter_hour1 = value;
+            return;
+          }  
+          if (message == F("HomeServer/Wetter/hour2")) {
+            Wetter_hour2 = value;
+            return;
+          }  
+          if (message == F("HomeServer/Wetter/hour3")) {
+            Wetter_hour3 = value;
+            return;
+          }  
+          if (message == F("HomeServer/Wetter/hour4")) {
+            Wetter_hour4 = value;
+            return;
+          }  
+        }   
+    }
+
+    
 }
