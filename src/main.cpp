@@ -1,21 +1,11 @@
 /*
 
-Wemos ESP 8266 mit 4.2 inch Waveshare SPI e-paper
+ESP32 mit 4.2 inch Waveshare SPI e-paper
 für Gang Stromanzeige
 
- * 4.2inch Display wemos mini
- * // BUSY -> D2, RST -> D4, DC -> D3, CS -> D8, CLK -> D5, DIN -> D7, GND -> GND, 3.3V -> 3.3V   +++
-BUSY  D2 gpIO4
-RST   D4 GPIO2
-senDC    D3 GPIO0
-CS    D1  --  D8 gpio15 -  pulldown 4.7k auf Masse !!!  -- bei Gang2 auf D1
-CLK   D5-GPIO14
-DIN   D7-GPIO13
-GND   GND
-3.3V  3V3
-
-Dallas Temp auf D1  gpIO5
-Bewegungssensor auf A0
+// mapping suggestion for ESP32, e.g. TTGO T8 ESP32-WROVER
+// BUSY -> 4, RST -> 0, DC -> 2, CS -> SS(5), CLK -> SCK(18), DIN -> MOSI(23), GND -> GND, 3.3V -> 3.3V
+// for use with Board: "ESP32 Dev Module":
 
 */
 
@@ -24,17 +14,18 @@ Bewegungssensor auf A0
 #include <U8g2_for_Adafruit_GFX.h>
 #include <Fonts/FreeMonoBold9pt7b.h>
 
-#include <ESP8266WiFi.h>
-#include <ESP8266HTTPClient.h>
+#include "WiFi.h"
 #include <time.h>  
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 
+
+
 #include "main.h"
 
-GxEPD2_BW<GxEPD2_420, GxEPD2_420::HEIGHT> display(GxEPD2_420(/*CS=D8*/ D8, /*DC=D3*/ D3, /*RST=D4*/ D4, /*BUSY=D2*/ D2));
+GxEPD2_BW<GxEPD2_420, GxEPD2_420::HEIGHT> display(GxEPD2_420(/*CS=D8*/ 5, /*DC=D3*/ 2, /*RST=D4*/ 0, /*BUSY=D2*/ 4));
 U8G2_FOR_ADAFRUIT_GFX u8g2Fonts;
 
 int8_t RedrawCounter=0;
@@ -76,21 +67,6 @@ WiFiClient wifiClient;
 const char* mqtt_server = "192.168.0.46";
 PubSubClient mqttclient(wifiClient);
 
-//  missing in esp8266, from esp32
-bool getLocalTime(struct tm * info, uint32_t ms)
-{
-    uint32_t start = millis();
-    time_t now;
-    while((millis()-start) <= ms) {
-        time(&now);
-        localtime_r(&now, info);
-        if(info->tm_year > (2016 - 1900)){
-            return true;
-        }
-        delay(10);
-    }
-    return false;
-}
 
 void setTimeZone(String TimeZone) {
   struct tm local;
@@ -130,7 +106,7 @@ void setup() {
   delay(1000);
   Serial.println("setup");
 
-  display.init(115200); // default 10ms reset pulse, e.g. for bare panels with DESPI-C02
+  display.init();//115200); // default 10ms reset pulse, e.g. for bare panels with DESPI-C02
  u8g2Fonts.begin(display); 
 
   //display.setRotation(0);
@@ -299,8 +275,8 @@ void helloWorld2(const char *HelloWorld)
 void UpdateWetterHour(String data, short x, short y) {
 
     StaticJsonDocument<256> doc;
-    //DeserializationError error = deserializeJson(doc, data);
-/*
+    DeserializationError error = deserializeJson(doc, data);
+
     if (error) {
       Serial.print(F("deserializeJson() failed: "));
       Serial.println(error.f_str());
@@ -308,8 +284,8 @@ void UpdateWetterHour(String data, short x, short y) {
     }
     else
     Serial.println("hour");
-    */
-       /* 
+    
+    
     int temp = doc["temp"]; // 8
     //float wind = doc["wind"]; // 17.1
     //const char* main = doc["main"]; // "Clouds"
@@ -318,13 +294,15 @@ void UpdateWetterHour(String data, short x, short y) {
     //const char* day = doc["day"]; // "Thu"
     const char* hour = doc["hour"]; // "08:00"
 
-    u8g2Fonts.setFont(u8g2_font_helvR14_tf);
+    u8g2Fonts.setFont(u8g2_font_helvR10_tf);
     u8g2Fonts.setCursor(x, y);
     u8g2Fonts.print(hour); 
     u8g2Fonts.setFont(u8g2_font_logisoso22_tf);
-    u8g2Fonts.setCursor(x, y+16);
-    u8g2Fonts.print(temp); 
-    */
+    u8g2Fonts.setCursor(x+10, y+27);
+    u8g2Fonts.print(String(temp)+"°"); 
+
+ 
+
 }
 
 void UpdateDisplay()
@@ -356,38 +334,39 @@ void UpdateDisplay()
     u8g2Fonts.print(String(bat)+"%");
 
     u8g2Fonts.setFont(u8g2_font_helvR14_tf);  // select u8g2 font from here: https://github.com/olikraus/u8g2/wiki/fntlistall
-    u8g2Fonts.setCursor(200, 350);
+    u8g2Fonts.setCursor(200, 320);
     u8g2Fonts.print(String(prod)+" Wh");
     u8g2Fonts.setCursor(200, 370);
     u8g2Fonts.print(String(wasser)+" Liter");
 
-    u8g2Fonts.setCursor(20, 295);
+    u8g2Fonts.setCursor(20, 310);
     u8g2Fonts.print("Buddy: ");
-    u8g2Fonts.setCursor(90, 295);
+    u8g2Fonts.setCursor(90, 310);
     u8g2Fonts.print(String(Buddy,1)+" kg");  
-    u8g2Fonts.setCursor(20, 320);
+    u8g2Fonts.setCursor(20, 331);
     u8g2Fonts.print("Mika: ");
-    u8g2Fonts.setCursor(90, 320);
+    u8g2Fonts.setCursor(90, 331);
     u8g2Fonts.print(String(Mika,1)+" kg");  
-    u8g2Fonts.setCursor(20, 345);
+    u8g2Fonts.setCursor(20, 353);
     u8g2Fonts.print("Matti: ");
-    u8g2Fonts.setCursor(90, 345);    
+    u8g2Fonts.setCursor(90, 353);    
     u8g2Fonts.print(String(Matti,1)+" kg");  
-    u8g2Fonts.setCursor(20, 370);
+    u8g2Fonts.setCursor(20, 375);
     u8g2Fonts.print("Timmi: ");    
-    u8g2Fonts.setCursor(90, 370);
+    u8g2Fonts.setCursor(90, 375);
     u8g2Fonts.print(String(Timmi,1)+" kg");  
 
     u8g2Fonts.setFont(u8g2_font_luBS12_tf); // u8g2_font_helvR12_tf);  // select u8g2 font from here: https://github.com/olikraus/u8g2/wiki/fntlistall
     u8g2Fonts.setCursor(20, 75);
     u8g2Fonts.print(Wetter_description);  
 
-    UpdateWetterHour(Wetter_hour1, 50, 120);
-    /*
-    UpdateWetterHour(Wetter_hour2, 50, 200);
-    UpdateWetterHour(Wetter_hour3, 50, 280);    
-    UpdateWetterHour(Wetter_hour4, 170, 120);
-*/
+    UpdateWetterHour(Wetter_hour1, 10, 120);
+    UpdateWetterHour(Wetter_hour2, 10, 180);
+    UpdateWetterHour(Wetter_hour3, 10, 240);    
+    UpdateWetterHour(Wetter_hour4, 160, 120);
+
+
+
   }
   while (display.nextPage());
   display.powerOff();
@@ -508,4 +487,92 @@ void MQTT_callback(char* topic, byte* payload, unsigned int length) {
     }
 
     
+}
+
+
+String getMeteoconIcon(String icon) {
+ 	// clear sky
+  // 01d
+  if (icon == "01d") 	{
+    return "B";
+  }
+  // 01n
+  if (icon == "01n") 	{
+    return "C";
+  }
+  // few clouds
+  // 02d
+  if (icon == "02d") 	{
+    return "H";
+  }
+  // 02n
+  if (icon == "02n") 	{
+    return "4";
+  }
+  // scattered clouds
+  // 03d
+  if (icon == "03d") 	{
+    return "N";
+  }
+  // 03n
+  if (icon == "03n") 	{
+    return "5";
+  }
+  // broken clouds
+  // 04d
+  if (icon == "04d") 	{
+    return "Y";
+  }
+  // 04n
+  if (icon == "04n") 	{
+    return "%";
+  }
+  // shower rain
+  // 09d
+  if (icon == "09d") 	{
+    return "R";
+  }
+  // 09n
+  if (icon == "09n") 	{
+    return "8";
+  }
+  // rain
+  // 10d
+  if (icon == "10d") 	{
+    return "Q";
+  }
+  // 10n
+  if (icon == "10n") 	{
+    return "7";
+  }
+  // thunderstorm
+  // 11d
+  if (icon == "11d") 	{
+    return "P";
+  }
+  // 11n
+  if (icon == "11n") 	{
+    return "6";
+  }
+  // snow
+  // 13d
+  if (icon == "13d") 	{
+    return "W";
+  }
+  // 13n
+  if (icon == "13n") 	{
+    return "#";
+  }
+  // mist
+  // 50d
+  if (icon == "50d") 	{
+    return "M";
+  }
+  // 50n
+  if (icon == "50n") 	{
+    return "M";
+  }
+  // Nothing matched: N/A
+  return ")";
+
 }
