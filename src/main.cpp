@@ -6,6 +6,7 @@ für Gang Stromanzeige
 // mapping suggestion for ESP32, e.g. TTGO T8 ESP32-WROVER
 // BUSY -> 4, RST -> 0, DC -> 2, CS -> SS(5), CLK -> SCK(18), DIN -> MOSI(23), GND -> GND, 3.3V -> 3.3V
 // for use with Board: "ESP32 Dev Module":
+// BUSY -> 4, RST -> 16, DC -> 17, CS -> SS(5), CLK -> SCK(18), DIN -> MOSI(23), GND -> GND, 3.3V -> 3.3V
 
 part of the code (icon handling)
 https://github.com/G6EJD/ESP32-e-Paper-Weather-Display/blob/master/examples/Waveshare_4_2/Waveshare_4_2.ino
@@ -28,7 +29,7 @@ https://github.com/G6EJD/ESP32-e-Paper-Weather-Display/blob/master/examples/Wave
 
 #include "main.h"
 
-GxEPD2_BW<GxEPD2_420, GxEPD2_420::HEIGHT> display(GxEPD2_420(/*CS=D8*/ 5, /*DC=D3*/ 2, /*RST=D4*/ 0, /*BUSY=D2*/ 4));
+GxEPD2_BW<GxEPD2_420, GxEPD2_420::HEIGHT> display(GxEPD2_420(/*CS*/ 5, /*DC*/ 17, /*RST*/ 16, /*BUSY*/ 4));
 U8G2_FOR_ADAFRUIT_GFX u8g2Fonts;
 
 
@@ -64,7 +65,7 @@ const char* wifihostname = "ESP_Epaper_Neu";
 #define UDPDEBUG 1
 #ifdef UDPDEBUG
 WiFiUDP udp;
-const char * udpAddress = "192.168.0.34";
+const char * udpAddress = "192.168.0.95";
 const int udpPort = 19814;
 #endif
 
@@ -73,6 +74,9 @@ const int udpPort = 19814;
 String MY_TZ = DefaultTimeZone ;
 struct tm timeinfo;
 char time_last_restart_day = -1;
+char time_last_minute = -1;
+
+uint32_t lastUpdateMs = millis();
 
 WiFiClient wifiClient;
 const char* mqtt_server = "192.168.0.46";
@@ -90,6 +94,8 @@ void setTimeZone(String TimeZone) {
 }
 
 void WifiConnect() {
+    alertMessage(300, 380, "Connect Wifi", RIGHT);
+
     WiFi.setHostname(wifihostname);  
     WiFi.mode(WIFI_STA);
     WiFi.begin(WIFI_SSID, WIFI_PASS);
@@ -108,6 +114,7 @@ void WifiConnect() {
     }
     IPAddress ip = WiFi.localIP();
     Serial.println(F("WiFi connected"));
+    UDBDebug("WiFi connected");
     Serial.println(ip);
 }
 
@@ -163,6 +170,18 @@ void setup() {
     mqttclient.setServer(mqtt_server, 1883);  
     mqttclient.setCallback(MQTT_callback); 
     mqttclient.setBufferSize(8192); 
+
+    short counter = 0;
+    while (!getLocalTime(&timeinfo, 10000)) {
+      UDBDebug("error getLocalTime"); 
+      if (counter++ > 20) 
+        ESP.restart();
+      delay(2000); }
+
+    Serial.println("setup done"); 
+    helloWorld("setup done");
+    delay(2000);
+
    if (mqttclient.connect(wifihostname, MQTT_User, MQTT_Pass)) {
       UDBDebug(F("MQTT connect successful"));  
       const char *TOPIC = ("hm/status/Temp_Aussen2/TEMPERATURE");
@@ -186,12 +205,7 @@ void setup() {
    Serial.printf("nach MQTT2");   
    
 
-  while (!getLocalTime(&timeinfo, 2000)) {
-    UDBDebug("error getLocalTime"); 
-    delay(2000); }
 
-    Serial.println("setup done"); 
-    helloWorld("setup done");
 }
 
 void loop() {
@@ -201,7 +215,11 @@ void loop() {
     ArduinoOTA.handle();
 
     if (!mqttclient.loop()) {
-      if (mqttclient.connect(wifihostname, MQTT_User, MQTT_Pass)) {
+      UDBDebug("MQTT was disconnected"); 
+      mqttclient.disconnect();
+      delay(50);
+      alertMessage(0, 380, "Connect MQTT", CENTER);
+      if (mqttclient.connect(wifihostname, MQTT_User, MQTT_Pass)) { //, "HomeServer/Server/displayWill", 2, true, "dead", true)) {
         UDBDebug("MQTT reconnect successful"); 
       }  
       else
@@ -212,16 +230,30 @@ void loop() {
       Serial.println("Failed to obtain time");
       UDBDebug("Failed to obtain time");  
      }
-   else
-    {
-      if ((time_last_restart_day == 6) && (timeinfo.tm_wday == 0))
+   
+    if ((time_last_restart_day == 6) && (timeinfo.tm_wday == 0))
       {
         // time for restart !! one restart every week
         UDBDebug("weekly restart");
         ESP.restart();
       }
-      else time_last_restart_day = timeinfo.tm_wday;
+    else time_last_restart_day = timeinfo.tm_wday;
+
+    uint32_t curmillis = millis();
+    if (lastUpdateMs + 300000 < curmillis) {
+        ESP.restart();
     }
+    else 
+      lastUpdateMs = curmillis;
+ 
+    if (time_last_minute != timeinfo.tm_min) {
+      time_last_minute = timeinfo.tm_min;
+      char zeit[20];
+      snprintf(zeit, 15, "%d:%d", timeinfo.tm_hour,timeinfo.tm_min);
+      alertMessage(240, 383, zeit, LEFT);
+      mqttclient.publish ("HomeServer/Server/Display", (const uint8_t*) zeit, 5, false);
+    }
+  
 
     delay(1);
 }
@@ -328,7 +360,7 @@ void UpdateWetterRain(short x, short y) {
       float root = doc[i];   // 0-9
       if (root > 0) {
         root *= 5;
-        short y1 = (int) root + y;
+        short y1 = (int) y - root;
         display.drawLine(x+i, y, x+i, y1, GxEPD_BLACK);
       }
   }
@@ -373,7 +405,7 @@ void UpdateDisplay()
       RedrawCounter = 0;
   }
   else
-    display.setPartialWindow(0, 0, display.width(), display.height());
+    display.setPartialWindow(0, 0, display.width(), 378); //display.height());
 
   display.firstPage();
   do
@@ -392,35 +424,36 @@ void UpdateDisplay()
     u8g2Fonts.print("Wind: "+String(Wetter_wind));
 
     //u8g2Fonts.setFont(u8g2_font_helvR14_tf);  // select u8g2 font from here: https://github.com/olikraus/u8g2/wiki/fntlistall
-    u8g2Fonts.setCursor(200, 330);
+    u8g2Fonts.setCursor(200, 325);
     u8g2Fonts.print(String(prod)+" Wh");
-    u8g2Fonts.setCursor(200, 380);
+    u8g2Fonts.setCursor(200, 370);
     u8g2Fonts.print(String(wasser)+" Liter");
 
     if (garten > 0) {
-      u8g2Fonts.setCursor(200, 360);
+      u8g2Fonts.setCursor(200, 350);
       u8g2Fonts.print("Boden: "+String(garten));
     }
 
-    u8g2Fonts.setCursor(20, 310);
+    u8g2Fonts.setCursor(20, 300);
     u8g2Fonts.print("Buddy: ");
-    u8g2Fonts.setCursor(90, 310);
+    u8g2Fonts.setCursor(90, 300);
     u8g2Fonts.print(String(Buddy,1)+" kg");  
-    u8g2Fonts.setCursor(20, 331);
+    u8g2Fonts.setCursor(20, 321);
     u8g2Fonts.print("Mika: ");
-    u8g2Fonts.setCursor(90, 331);
+    u8g2Fonts.setCursor(90, 321);
     u8g2Fonts.print(String(Mika,1)+" kg");  
-    u8g2Fonts.setCursor(20, 353);
+    u8g2Fonts.setCursor(20, 343);
     u8g2Fonts.print("Matti: ");
-    u8g2Fonts.setCursor(90, 353);    
+    u8g2Fonts.setCursor(90, 343);    
     u8g2Fonts.print(String(Matti,1)+" kg");  
-    u8g2Fonts.setCursor(20, 375);
+    u8g2Fonts.setCursor(20, 365);
     u8g2Fonts.print("Timmi: ");    
-    u8g2Fonts.setCursor(90, 375);
+    u8g2Fonts.setCursor(90, 365);
     u8g2Fonts.print(String(Timmi,1)+" kg");  
 
-    u8g2Fonts.setFont(u8g2_font_luBS12_tf); // u8g2_font_helvR12_tf);  // select u8g2 font from here: https://github.com/olikraus/u8g2/wiki/fntlistall
-    u8g2Fonts.setCursor(20, 85);
+    u8g2Fonts.setFont(u8g2_font_helvR12_te); //(u8g2_font_luBS12_tf); // u8g2_font_helvR12_tf);  
+    // select u8g2 font from here: https://github.com/olikraus/u8g2/wiki/fntlistall
+    u8g2Fonts.setCursor(5, 95);
     u8g2Fonts.print(Wetter_description);  
 
     UpdateWetterHour(Wetter_hour1, 10, 120);
@@ -429,7 +462,13 @@ void UpdateDisplay()
     UpdateWetterHour(Wetter_hour4, 160, 120);
 
     UpdateWetterRain(200, 180);
-    UpdateWetterTemp(200, 240);
+    UpdateWetterTemp(200, 230);
+
+    time_last_minute = timeinfo.tm_min;
+      char zeit[20];
+      snprintf(zeit, 15, "%d:%d", timeinfo.tm_hour,timeinfo.tm_min);
+      u8g2Fonts.setFont(u8g2_font_helvB08_tf);
+      drawString(0, 380, zeit, LEFT);
   }
   while (display.nextPage());
   display.powerOff();
@@ -458,6 +497,8 @@ float round1(float value) {
 
   // Callback function
 void MQTT_callback(char* topic, byte* payload, unsigned int length) {
+
+    lastUpdateMs = millis();
 
     String message = String(topic);
     //int8_t joblength = message.length()+1;// 0 char
@@ -517,6 +558,8 @@ void MQTT_callback(char* topic, byte* payload, unsigned int length) {
           }
           if (message == F("HomeServer/Wetter/main")) {
             Wetter_main = value;
+            UDBDebug("ePaper: HomeServer/Wetter/main");
+            UpdateDisplay();
             return;
           }
           if (message == F("HomeServer/Wetter/description")) {
@@ -862,4 +905,19 @@ void drawString(int x, int y, String text, alignment align) {
   if (align == CENTER) x = x - w / 2;
   u8g2Fonts.setCursor(x, y + h);
   u8g2Fonts.print(text);
+}
+
+
+void alertMessage(int x, int y, String text, alignment align) {
+  
+  display.setPartialWindow(0, 378, display.width(), display.height());
+
+  display.firstPage();
+  do
+  {
+    u8g2Fonts.setFont(u8g2_font_helvB08_tf);
+    drawString(x, y, text, align);
+  }  
+  while (display.nextPage());
+  display.powerOff();
 }

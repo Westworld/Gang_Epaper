@@ -24,3 +24,5 @@ void Cloudy(int x, int y, bool IconSize, String IconName);
 void MostlyCloudy(int x, int y, bool IconSize, String IconName);
 void MostlySunny(int x, int y, bool IconSize, String IconName);
 void Sunny(int x, int y, bool IconSize, String IconName);
+
+void alertMessage(int x, int y, String text, alignment align);
