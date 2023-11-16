@@ -118,6 +118,28 @@ void WifiConnect() {
     Serial.println(ip);
 }
 
+void MQTT_reconnect() {
+if (mqttclient.connect(wifihostname, MQTT_User, MQTT_Pass)) {
+      UDBDebug(F("MQTT connect successful"));  
+      const char *TOPIC = ("hm/status/Temp_Aussen2/TEMPERATURE");
+      mqttclient.subscribe(TOPIC);  
+      const char *TOPIC2 = ("HomeServer/Batterie/USOC");
+      mqttclient.subscribe(TOPIC2);   
+      const char *TOPIC3 = ("HomeServer/Tiere/#");
+      mqttclient.subscribe(TOPIC3);
+      const char *TOPIC4 = ("HomeServer/Heizung/WasserDay");
+      mqttclient.subscribe(TOPIC4);      
+      const char *TOPIC5 = ("HomeServer/Strom/Produktion");
+      mqttclient.subscribe(TOPIC5);   
+      const char *TOPIC6 = ("HomeServer/Wetter/#");
+      mqttclient.subscribe(TOPIC6);  
+      const char *TOPIC7 = ("hm/status/Gartensensor:2/HUMIDITY");
+      mqttclient.subscribe(TOPIC7);  
+      }  
+    else
+       UDBDebug("MQTT connect error");  
+}
+
 void setup() {
   Serial.begin(115200);
   Serial.println();
@@ -182,25 +204,7 @@ void setup() {
     helloWorld("setup done");
     delay(2000);
 
-   if (mqttclient.connect(wifihostname, MQTT_User, MQTT_Pass)) {
-      UDBDebug(F("MQTT connect successful"));  
-      const char *TOPIC = ("hm/status/Temp_Aussen2/TEMPERATURE");
-      mqttclient.subscribe(TOPIC);  
-      const char *TOPIC2 = ("HomeServer/Batterie/USOC");
-      mqttclient.subscribe(TOPIC2);   
-      const char *TOPIC3 = ("HomeServer/Tiere/#");
-      mqttclient.subscribe(TOPIC3);
-      const char *TOPIC4 = ("HomeServer/Heizung/WasserDay");
-      mqttclient.subscribe(TOPIC4);      
-      const char *TOPIC5 = ("HomeServer/Strom/Produktion");
-      mqttclient.subscribe(TOPIC5);   
-      const char *TOPIC6 = ("HomeServer/Wetter/#");
-      mqttclient.subscribe(TOPIC6);  
-      const char *TOPIC7 = ("hm/status/Gartensensor:2/HUMIDITY");
-      mqttclient.subscribe(TOPIC7);  
-      }  
-    else
-       UDBDebug("MQTT connect error");  
+   MQTT_reconnect();
 
    Serial.printf("nach MQTT2");   
    
@@ -216,14 +220,11 @@ void loop() {
 
     if (!mqttclient.loop()) {
       UDBDebug("MQTT was disconnected"); 
+      alertMessage(0, 380, " MQTT error", CENTER);
       mqttclient.disconnect();
-      delay(50);
-      alertMessage(0, 380, "Connect MQTT", CENTER);
-      if (mqttclient.connect(wifihostname, MQTT_User, MQTT_Pass)) { //, "HomeServer/Server/displayWill", 2, true, "dead", true)) {
-        UDBDebug("MQTT reconnect successful"); 
-      }  
-      else
-        UDBDebug("MQTT reconnect error");  
+      delay(5000);
+      ESP.restart();
+      //MQTT_reconnect();
     };
 
     if(!getLocalTime(&timeinfo, 2000)){
@@ -240,22 +241,21 @@ void loop() {
     else time_last_restart_day = timeinfo.tm_wday;
 
     uint32_t curmillis = millis();
-    if (lastUpdateMs + 300000 < curmillis) {
+    if ((lastUpdateMs + 3000000) < curmillis) {   // 3 000 000 sekunden = 50 minuten
+       UDBDebug("mqtt fehler - restart");
         ESP.restart();
     }
-    else 
-      lastUpdateMs = curmillis;
  
     if (time_last_minute != timeinfo.tm_min) {
       time_last_minute = timeinfo.tm_min;
       char zeit[20];
       snprintf(zeit, 15, "%d:%d", timeinfo.tm_hour,timeinfo.tm_min);
       alertMessage(240, 383, zeit, LEFT);
-      mqttclient.publish ("HomeServer/Server/Display", (const uint8_t*) zeit, 5, false);
+      //mqttclient.publish ("HomeServer/Server/Display", (const uint8_t*) zeit, 5, false);
     }
   
 
-    delay(1);
+    delay(10);
 }
 
 
@@ -495,6 +495,10 @@ float round1(float value) {
    return (int)(value * 10 + 0.5) / 10.0;
 }
 
+float round0(float value) {
+   return (int)(value + 0.5) ;
+}
+
   // Callback function
 void MQTT_callback(char* topic, byte* payload, unsigned int length) {
 
@@ -507,7 +511,8 @@ void MQTT_callback(char* topic, byte* payload, unsigned int length) {
     Serial.println("### "+message +" - "+value);
 
     if (message == F("hm/status/Temp_Aussen2/TEMPERATURE")) {
-      temp = value.toInt();
+      temp = round0(value.toFloat());
+      UpdateDisplay();
       return;
     }
 
@@ -529,6 +534,7 @@ void MQTT_callback(char* topic, byte* payload, unsigned int length) {
 
     if (message == F("HomeServer/Heizung/WasserDay")) {
       wasser = value.toInt();
+      UpdateDisplay();
       return;
     }
 
